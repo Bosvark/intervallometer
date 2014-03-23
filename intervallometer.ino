@@ -365,6 +365,8 @@ void state_machine()
       interval_str.toCharArray(interval_char, sizeof(interval_char));
 
       while(1){
+        LCDClear();
+        LCDString("Intervallo");
         gotoXY(0,1);
         LCDString("I:");
         LCDString(interval_char);
@@ -372,6 +374,7 @@ void state_machine()
 
         String shot_count_str(shotcounter);
         char shot_count_char[10];
+        memset(shot_count_char, 0, sizeof(shot_count_char));
         shot_count_str.toCharArray(shot_count_char, sizeof(shot_count_char));
         LCDString(shot_count_char);
               
@@ -384,6 +387,7 @@ void state_machine()
           intervalcounter--;  // Count another interval since take_picture() also takes a second
           
           String interval_str(intervalcounter+1);
+          memset(interval_char, 0, sizeof(interval_char));
           interval_str.toCharArray(interval_char, sizeof(interval_char));
         }else
           break;
