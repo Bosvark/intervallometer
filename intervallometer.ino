@@ -27,6 +27,11 @@ int adc_key_in  = 0;
 #define btnSELECT 4
 #define btnNONE   5
 
+#define MODE_NORMAL  0
+#define MODE_INVERSE  1
+
+char lcd_mode=MODE_NORMAL;
+
 //This table contains the hex values that represent pixels
 //for a font that is 5 pixels wide and 8 pixels high
 static const byte ASCII[][5] = {
@@ -160,9 +165,7 @@ void take_picture()
 {
   gotoXY(0,5);
   LCDString("TAKING SHOT!");
-  
-  delay(500);  // The other 500 msec will be spent taking the shot
-        
+          
   pinMode(PIN_SHUTTER, OUTPUT);
   
   digitalWrite(PIN_SHUTTER, HIGH);
@@ -170,6 +173,8 @@ void take_picture()
   digitalWrite(PIN_SHUTTER, LOW);
   
   pinMode(PIN_SHUTTER, INPUT);
+
+  delay(500);  // The other 500 msec will be spent taking the shot
 
   gotoXY(0,5);
   LCDString("            ");
@@ -273,7 +278,9 @@ void state_machine()
       }
 
       LCDClear();
+      LCDMode(MODE_INVERSE);
       LCDString("Set Interval");
+      LCDMode(MODE_NORMAL);
       
       String interval_str(interval);
       char interval_char[10];
@@ -301,7 +308,9 @@ void state_machine()
       }
 
       LCDClear();
+      LCDMode(MODE_INVERSE);
       LCDString("Shot count");
+      LCDMode(MODE_NORMAL);
       
       String shot_count_str(shot_count);
       char shot_count_char[10];
@@ -328,7 +337,9 @@ void state_machine()
       }
 
       LCDClear();
+      LCDMode(MODE_INVERSE);
       LCDString("Backlight");
+      LCDMode(MODE_NORMAL);
       
       String shot_count_str(backlight);
       char shot_count_char[10];
@@ -423,35 +434,13 @@ void state_machine()
 }
 
 void setup(void) {
-//  analogReference(EXTERNAL);
   Serial.begin(9600);
   LCDInit(); //Init the LCD
   
 }
 
 void loop(void) {
-/*
-  char key_char[10];
-  lcd_key = read_LCD_buttons();
-
-  String key_str = String(lcd_key);
-  memset(key_char, 0, sizeof(key_char));
-  key_str.toCharArray(key_char, sizeof(key_char));
-
-  LCDClear();
-  gotoXY(0,1);
-  LCDString("Key:");
-  LCDString(key_char);
-  
-  delay(250);
-*/
   state_machine();
-/*
-analogWrite(PIN_BKLIGHT, 255);
-delay(1000);
-analogWrite(PIN_BKLIGHT, 0);
-delay(1000);
-*/
 }
 
 void gotoXY(int x, int y) {
@@ -465,18 +454,40 @@ void LCDBitmap(char my_array[]){
     LCDWrite(LCD_DATA, my_array[index]);
 }
 
+void LCDMode(char mode)
+{
+  if(mode == 0)
+    lcd_mode = MODE_NORMAL;
+  else
+    lcd_mode = MODE_INVERSE;
+}
+
 //This function takes in a character, looks it up in the font table/array
 //And writes it to the screen
 //Each character is 8 bits tall and 5 bits wide. We pad one blank column of
 //pixels on each side of the character for readability.
 void LCDCharacter(char character) {
-  LCDWrite(LCD_DATA, 0x00); //Blank vertical line padding
+  if(lcd_mode == MODE_INVERSE)
+    LCDWrite(LCD_DATA, 0xff); //Blank vertical line padding
+  else
+    LCDWrite(LCD_DATA, 0x00); //Blank vertical line padding
 
+  char disp_char;
   for (int index = 0 ; index < 5 ; index++)
-    LCDWrite(LCD_DATA, ASCII[character - 0x20][index]);
+  {
+    disp_char = ASCII[character - 0x20][index];
+    
+    if(lcd_mode == MODE_INVERSE)
+      disp_char = ~disp_char;
+      
+    LCDWrite(LCD_DATA, disp_char);
     //0x20 is the ASCII character for Space (' '). The font table starts with this character
+  }
 
-  LCDWrite(LCD_DATA, 0x00); //Blank vertical line padding
+  if(lcd_mode == MODE_INVERSE)
+    LCDWrite(LCD_DATA, 0xff); //Blank vertical line padding
+  else
+    LCDWrite(LCD_DATA, 0x00); //Blank vertical line padding
 }
 
 //Given a string of characters, one by one is passed to the LCD
@@ -487,6 +498,8 @@ void LCDString(char *characters) {
 
 //Clears the LCD by writing zeros to the entire screen
 void LCDClear(void) {
+  LCDMode(MODE_NORMAL);
+  
   for (int index = 0 ; index < (LCD_X * LCD_Y / 8) ; index++)
     LCDWrite(LCD_DATA, 0x00);
     
