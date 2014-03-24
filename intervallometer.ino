@@ -5,6 +5,7 @@
 #define PIN_SDIN  11//4 //Pin 6 on LCD
 #define PIN_SCLK  13//3 //Pin 7 on LCD
 #define PIN_BKLIGHT 9
+#define PIN_LCD_POWER 8
 
 #define PIN_SHUTTER  2
 #define PIN_FOCUS    3
@@ -435,6 +436,11 @@ void state_machine()
 
 void setup(void) {
   Serial.begin(9600);
+  
+  // Power up the LCD display
+  pinMode(PIN_LCD_POWER, OUTPUT);
+  digitalWrite(PIN_LCD_POWER, HIGH);
+  
   LCDInit(); //Init the LCD
   
 }
