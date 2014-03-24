@@ -6,6 +6,7 @@
 #define PIN_SCLK  13//3 //Pin 7 on LCD
 #define PIN_BKLIGHT 9
 #define PIN_LCD_POWER 8
+#define PIN_KBD_ENABLE 10
 
 #define PIN_SHUTTER  2
 #define PIN_FOCUS    3
@@ -440,6 +441,10 @@ void setup(void) {
   // Power up the LCD display
   pinMode(PIN_LCD_POWER, OUTPUT);
   digitalWrite(PIN_LCD_POWER, HIGH);
+  
+  // Enable the keyboard 
+  pinMode(PIN_KBD_ENABLE, OUTPUT);
+  digitalWrite(PIN_KBD_ENABLE, HIGH);
   
   LCDInit(); //Init the LCD
   
