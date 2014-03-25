@@ -1,3 +1,6 @@
+#include <avr/sleep.h>
+#include <avr/power.h>
+
 // select the pins used on the LCD panel
 #define PIN_SCE   7 //Pin 3 on LCD
 #define PIN_RESET 6 //Pin 4 on LCD
@@ -8,8 +11,10 @@
 #define PIN_LCD_POWER 8
 #define PIN_KBD_ENABLE 10
 
-#define PIN_SHUTTER  2
+#define PIN_SHUTTER  12
 #define PIN_FOCUS    3
+
+#define PIN_BTN_SELECT  2
 
 //The DC pin tells the LCD if we are sending a command or data
 #define LCD_COMMAND 0 
@@ -135,13 +140,97 @@ static const byte ASCII[][5] = {
   ,{0x10, 0x08, 0x08, 0x10, 0x08} // 7e ~
   ,{0x78, 0x46, 0x41, 0x46, 0x78} // 7f DEL
 };
- 
+
+void pin2Interrupt(void)
+{
+  /* This will bring us back from sleep. */
+  
+  /* We detach the interrupt to stop it from 
+   * continuously firing while the interrupt pin
+   * is low.
+   */
+  detachInterrupt(0);
+}
+
+void go_to_sleep(void)
+{
+  
+  // Setup pin2 as an interrupt and attach handler.
+  attachInterrupt(0, pin2Interrupt, FALLING);
+  delay(100);
+  
+  set_sleep_mode(SLEEP_MODE_PWR_DOWN);
+  
+  sleep_enable();
+  
+  sleep_mode();
+  
+  // The program will continue from here.
+  
+  // First thing to do is disable sleep.
+  sleep_disable(); 
+}
+
+int read_SELECT_button(void)
+{
+  if(digitalRead(PIN_BTN_SELECT) == LOW)
+  {
+    unsigned long start_time = millis();
+    
+    delay(50);  // Debounce time
+    
+    if(digitalRead(PIN_BTN_SELECT) == LOW)
+    {
+      unsigned long current_time;
+      
+      while(1)
+      {
+        current_time = millis();
+        
+        if(digitalRead(PIN_BTN_SELECT) == LOW)
+        {
+          if(current_time - start_time > 3000)
+          {
+            // Power down the LCD display
+            digitalWrite(PIN_LCD_POWER, LOW);
+            
+            // Switch off backlight
+            pinMode(PIN_BKLIGHT, INPUT);
+  
+            // Disable the keyboard 
+            digitalWrite(PIN_KBD_ENABLE, LOW);
+            
+            // Wait for SELECT button to be released
+            while(digitalRead(PIN_BTN_SELECT) == LOW)
+              delay(10);
+            
+            // Go to sleep
+            go_to_sleep();
+   
+            setup();  // Init everything again
+            
+            analogWrite(PIN_BKLIGHT, 255);
+            
+            return 0;
+          }
+        }else
+          return 1;
+          
+        delay(10);
+      }
+    }
+  }
+  
+  return 0;
+}
 // read the buttons
 int read_LCD_buttons()
 {
  adc_key_in = analogRead(0);      // read the value from the sensor 
  Serial.println(adc_key_in);
- //return adc_key_in;
+ 
+ if(read_SELECT_button()) return btnSELECT;
+ 
  // my buttons when read are centered at these valies: 0, 144, 329, 504, 741
  // we add approx 50 to those values and check to see if we are close
  if (adc_key_in > 750) return btnNONE; // We make this the 1st option for speed reasons since it will be the most likely result
@@ -150,8 +239,8 @@ int read_LCD_buttons()
  if (adc_key_in < 150)  return btnUP; 
  if (adc_key_in < 350)  return btnDOWN; 
  if (adc_key_in < 500)  return btnLEFT; 
- if (adc_key_in < 750)  return btnSELECT;  // 550
-  
+ if (adc_key_in < 750)  return btnSELECT;  // Select is kept here for compatibility with dev unit
+   
  return btnNONE;  // when all others fail, return this...
 }
 
@@ -446,7 +535,12 @@ void setup(void) {
   pinMode(PIN_KBD_ENABLE, OUTPUT);
   digitalWrite(PIN_KBD_ENABLE, HIGH);
   
+  // Enable select button
+  pinMode(PIN_BTN_SELECT, INPUT);
+  
   LCDInit(); //Init the LCD
+  
+  state = 0;
   
 }
 
