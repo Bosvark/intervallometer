@@ -33,6 +33,7 @@ int adc_key_in  = 0;
 #define btnLEFT   3
 #define btnSELECT 4
 #define btnNONE   5
+#define btnRESET   6
 
 #define MODE_NORMAL  0
 #define MODE_INVERSE  1
@@ -141,27 +142,19 @@ static const byte ASCII[][5] = {
   ,{0x78, 0x46, 0x41, 0x46, 0x78} // 7f DEL
 };
 
-void pin2Interrupt(void)
+void pin2Interrupt()
 {
-  /* This will bring us back from sleep. */
-  
-  /* We detach the interrupt to stop it from 
-   * continuously firing while the interrupt pin
-   * is low.
-   */
-  detachInterrupt(0);
 }
 
 void go_to_sleep(void)
 {
   
-  // Setup pin2 as an interrupt and attach handler.
-  attachInterrupt(0, pin2Interrupt, FALLING);
-  delay(100);
-  
   set_sleep_mode(SLEEP_MODE_PWR_DOWN);
   
   sleep_enable();
+
+  // Setup pin2 as an interrupt and attach handler.
+  attachInterrupt(0, pin2Interrupt, FALLING);
   
   sleep_mode();
   
@@ -169,6 +162,8 @@ void go_to_sleep(void)
   
   // First thing to do is disable sleep.
   sleep_disable(); 
+
+  detachInterrupt(0);
 }
 
 int read_SELECT_button(void)
@@ -209,9 +204,7 @@ int read_SELECT_button(void)
    
             setup();  // Init everything again
             
-            analogWrite(PIN_BKLIGHT, 255);
-            
-            return 0;
+            return 2;
           }
         }else
           return 1;
@@ -229,7 +222,10 @@ int read_LCD_buttons()
  adc_key_in = analogRead(0);      // read the value from the sensor 
  Serial.println(adc_key_in);
  
- if(read_SELECT_button()) return btnSELECT;
+ int select = read_SELECT_button();
+ 
+ if(select == 1) return btnSELECT;
+ else if(select == 2) return btnRESET;  // Woke up from sleep
  
  // my buttons when read are centered at these valies: 0, 144, 329, 504, 741
  // we add approx 50 to those values and check to see if we are close
@@ -252,7 +248,29 @@ int intervalcounter = 0;
 int shot_count = 5;
 int shotcounter = 0;
 
-void take_picture()
+int delay_with_key_read(unsigned long ms)
+{
+  unsigned long start=millis();
+  unsigned long current;
+  int select;
+  
+  while(1)
+  {
+    select = read_SELECT_button();
+    
+    if(select)
+      return select;
+    
+    current = millis();
+    
+    if(current - start >= ms)
+      return 0;
+      
+    delay(10);
+  }
+}
+
+int take_picture()
 {
   gotoXY(0,5);
   LCDString("TAKING SHOT!");
@@ -260,15 +278,17 @@ void take_picture()
   pinMode(PIN_SHUTTER, OUTPUT);
   
   digitalWrite(PIN_SHUTTER, HIGH);
-  delay(500);
+  if(delay_with_key_read(500)) return 1;
   digitalWrite(PIN_SHUTTER, LOW);
   
   pinMode(PIN_SHUTTER, INPUT);
 
-  delay(500);  // The other 500 msec will be spent taking the shot
+  if(delay_with_key_read(500)) return 1;  // The other 500 msec will be spent taking the shot
 
   gotoXY(0,5);
   LCDString("            ");
+  
+  return 0;
 }
 
 void focus()
@@ -317,6 +337,9 @@ void state_machine()
   int old_state = state;
   
   lcd_key = read_LCD_buttons();  // read the buttons
+  
+  if(lcd_key == btnRESET)
+    state = 0;
   
   if((lcd_key == btnNONE) && (refresh == 0)){
     return;
@@ -452,13 +475,8 @@ void state_machine()
       
       // Break statement ommitted intentionally
     case 6:
-      if (lcd_key == btnSELECT){
-        state = 0;
-        break;
-      }
-      
       if(intervalcounter >= 1){
-        delay(1000);
+        if(delay_with_key_read(1000)) {state = 0; refresh = 1; return;}  // We got cancelled
         intervalcounter--;
       }
               
@@ -484,7 +502,7 @@ void state_machine()
           intervalcounter = interval;
           
           // Take the shot
-          take_picture();
+          if(take_picture()) {state = 0; refresh = 1; return;}  // We got cancelled
           shotcounter--;
           intervalcounter--;  // Count another interval since take_picture() also takes a second
           
@@ -539,6 +557,8 @@ void setup(void) {
   pinMode(PIN_BTN_SELECT, INPUT);
   
   LCDInit(); //Init the LCD
+  
+  analogWrite(PIN_BKLIGHT, backlight);
   
   state = 0;
   
@@ -626,9 +646,6 @@ void LCDInit(void) {
   digitalWrite(PIN_RESET, LOW);
   digitalWrite(PIN_RESET, HIGH);
   
-  // Switch on backlight
-  analogWrite(PIN_BKLIGHT, 255);
-
   LCDWrite(LCD_COMMAND, 0x21); //Tell LCD that extended commands follow
   LCDWrite(LCD_COMMAND, 0xb0); //Set LCD Vop (Contrast): Try 0xB1(good @ 3.3V) or 0xBF if your display is too dark
   LCDWrite(LCD_COMMAND, 0x04); //Set Temp coefficent
